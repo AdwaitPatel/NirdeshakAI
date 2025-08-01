@@ -9,15 +9,13 @@ import {
   Bot,
   Plus,
   Menu,
+  AlertCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSpeechRecognition, useTextToSpeech } from "../hooks/useSpeech";
-import {
-  generateMessageId,
-  validateInput,
-  getResponseTime,
-} from "../utils/helpers";
+import { generateMessageId, validateInput } from "../utils/helpers";
 import VoiceVisualizer from "./VoiceVisualizer";
+import apiService from "../api";
 
 const ChatInterface = () => {
   const [message, setMessage] = useState("");
@@ -26,6 +24,8 @@ const ChatInterface = () => {
   const [isFirstVisit, setIsFirstVisit] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [speechProcessing, setSpeechProcessing] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  const [isBackendConnected, setIsBackendConnected] = useState(true);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -63,6 +63,26 @@ const ChatInterface = () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
+  }, []);
+
+  // Check backend connection on component mount
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const isConnected = await apiService.healthCheck();
+        setIsBackendConnected(isConnected);
+        if (!isConnected) {
+          setApiError(
+            "Backend server is not responding. Please ensure the FastAPI server is running on http://localhost:8000"
+          );
+        }
+      } catch {
+        setIsBackendConnected(false);
+        setApiError("Failed to connect to backend server");
+      }
+    };
+
+    checkBackend();
   }, []);
 
   useEffect(() => {
@@ -130,43 +150,42 @@ const ChatInterface = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const currentMessage = message.trim();
     setMessage("");
     setIsLoading(true);
     setIsFirstVisit(false);
+    setApiError(null);
 
-    // Simulate AI response
-    const responseTime = getResponseTime();
-    setTimeout(() => {
-      const aiResponse = {
+    try {
+      // Call the real API
+      const aiResponse = await apiService.sendMessage(currentMessage);
+
+      const responseMessage = {
         id: generateMessageId(),
         type: "ai",
-        content: generateAIResponse(userMessage.content),
+        content: aiResponse,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, aiResponse]);
+
+      setMessages((prev) => [...prev, responseMessage]);
+      setIsBackendConnected(true);
+    } catch (error) {
+      console.error("API Error:", error);
+      setIsBackendConnected(false);
+      setApiError(error.message);
+
+      // Add error message to chat
+      const errorMessage = {
+        id: generateMessageId(),
+        type: "ai",
+        content: `I'm sorry, I'm having trouble connecting to the server right now. Please check if the backend is running on http://localhost:8000 or try again later.\n\nError: ${error.message}`,
+        timestamp: new Date(),
+        isError: true,
+      };
+
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, responseTime);
-  };
-
-  const generateAIResponse = (userQuery) => {
-    const query = userQuery.toLowerCase();
-
-    if (query.includes("passport")) {
-      return "To apply for a passport in India:\n\n1. **Visit the Official Portal**: Go to passportindia.gov.in\n2. **Register and Fill Form**: Create an account and fill the online application form\n3. **Book Appointment**: Schedule an appointment at your nearest Passport Seva Kendra (PSK)\n4. **Required Documents**:\n   - Proof of Identity (Aadhar, Voter ID, etc.)\n   - Proof of Address\n   - Birth Certificate\n   - Recent photographs\n\n5. **Visit PSK**: Attend your appointment with original documents\n6. **Police Verification**: Complete if required\n7. **Receive Passport**: Usually takes 7-15 days\n\n**Fees**: ₹1,500 for 36 pages, ₹2,000 for 60 pages (normal processing)";
-    } else if (
-      query.includes("driving") ||
-      query.includes("license") ||
-      query.includes("dl")
-    ) {
-      return "To get a Driving License in India:\n\n**Step 1: Learner's License**\n- Apply online at parivahan.gov.in or visit RTO\n- Submit Form 1, identity proof, address proof, age proof\n- Pass written test\n- Get Learner's License (valid for 6 months)\n\n**Step 2: Permanent License**\n- Wait at least 30 days after getting LL\n- Book driving test appointment\n- Submit Form 2, LL, and required documents\n- Pass practical driving test\n\n**Required Documents**:\n- Age proof (birth certificate, school certificate)\n- Address proof (Aadhar, utility bills)\n- Medical certificate (for commercial vehicles)\n- Passport-size photographs\n\n**Fees**: ₹200 for LL, ₹200 for DL (may vary by state)";
-    } else if (query.includes("pan")) {
-      return 'To apply for PAN Card online:\n\n**Method 1: Official Income Tax Website**\n1. Visit incometaxindia.gov.in\n2. Go to "Quick Links" → "Apply for PAN"\n3. Fill Form 49A (Indian citizens) or 49AA (foreign citizens)\n4. Upload required documents\n5. Pay fees online (₹110)\n6. Submit application\n\n**Method 2: Authorized Agencies**\n- NSDL: tin-nsdl.com\n- UTIITSL: utiitsl.com\n\n**Required Documents**:\n- Identity Proof (Aadhar, Passport, Voter ID)\n- Address Proof\n- Date of Birth Proof\n- Recent photograph\n\n**Processing Time**: 15-20 working days\n**Track Status**: Use acknowledgment number on the respective website';
-    } else if (query.includes("aadhar") || query.includes("aadhaar")) {
-      return 'Aadhar Card Services:\n\n**New Enrollment**:\n1. Visit nearest Aadhar Enrollment Center\n2. Fill enrollment form\n3. Provide biometric data (fingerprints, iris scan, photo)\n4. Submit supporting documents\n5. Get acknowledgment slip\n6. Receive Aadhar in 60-90 days\n\n**Update Aadhar**:\n- Online: uidai.gov.in → "Update Your Aadhar"\n- Offline: Visit Aadhar center\n\n**Download e-Aadhar**:\n- Visit uidai.gov.in\n- Enter Aadhar number/VID and security code\n- Verify with OTP\n- Download PDF (password: PIN code + year of birth)\n\n**Services Available**:\n- Demographic updates (name, address, mobile, email)\n- Biometric updates\n- Document updates\n- Virtual ID generation';
-    } else if (query.includes("voter") || query.includes("epic")) {
-      return 'Voter ID Card Registration:\n\n**Online Registration**:\n1. Visit nvsp.in (National Voters\' Service Portal)\n2. Select "Apply for Registration of New Voter"\n3. Fill Form 6\n4. Upload required documents\n5. Submit application\n\n**Required Documents**:\n- Age proof (birth certificate, passport, etc.)\n- Address proof (Aadhar, utility bill, etc.)\n- Recent photograph\n\n**Offline Registration**:\n- Get Form 6 from nearest Electoral Registration Office\n- Submit with documents to ERO/BLO\n\n**Processing Time**: 30-45 days\n**Track Status**: Use reference number on nvsp.in\n\n**Additional Services**:\n- Download EPIC: voters.eci.gov.in\n- Correction in details: Form 8\n- Transfer registration: Form 8A';
-    } else {
-      return 'I\'m NirdeshakAI, your government services assistant. I can help you with:\n\n🏛️ **Government Services**:\n- Passport applications and renewals\n- Driving License procedures\n- PAN Card applications\n- Aadhar services and updates\n- Voter ID registration\n- Income certificates\n- Property registration\n- Police clearance certificates\n\n💡 **How to use me**:\n- Type your question in plain language\n- Use voice input by clicking the microphone\n- Ask in Hindi or English\n\nTry asking: "How do I apply for a passport?" or "What documents do I need for driving license?"';
     }
   };
 
@@ -243,10 +262,36 @@ const ChatInterface = () => {
               <Menu size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
             <div className="flex items-center space-x-3">
+              <img
+                src="https://downloads.marketplace.jetbrains.com/files/21239/394982/icon/default.png"
+                alt=""
+                className="h-6 w-6 bg-transparent"
+              />
               <span className="text-xl font-semibold text-gray-900 dark:text-white font-poppins">
                 NirdeshakAI
               </span>
             </div>
+          </div>
+
+          {/* Backend Status Indicator */}
+          <div className="flex items-center space-x-2">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isBackendConnected ? "bg-green-500" : "bg-red-500"
+              }`}
+            ></div>
+            <span
+              className={`text-sm ${
+                isBackendConnected
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              {isBackendConnected ? "Connected" : "Disconnected"}
+            </span>
+            {!isBackendConnected && (
+              <AlertCircle size={16} className="text-red-500" />
+            )}
           </div>
         </div>
 
@@ -260,9 +305,12 @@ const ChatInterface = () => {
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.6, ease: "easeOut" }}
-                  className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl flex items-center justify-center mb-6 mx-auto shadow-2xl"
+                  className="w-20 h-20 bg-gradient-to-r bg-transparent rounded-3xl flex items-center justify-center mb-6 mx-auto shadow-2xl"
                 >
-                  <Bot size={40} className="text-white" />
+                  <img
+                    src="https://downloads.marketplace.jetbrains.com/files/21239/394982/icon/default.png"
+                    alt=""
+                  />
                 </motion.div>
                 <motion.h1
                   initial={{ y: 20, opacity: 0 }}
@@ -502,11 +550,15 @@ const ChatInterface = () => {
                         className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${
                           msg.type === "user"
                             ? "bg-blue-600"
+                            : msg.isError
+                            ? "bg-red-500"
                             : "bg-gradient-to-r from-purple-600 to-blue-600"
                         }`}
                       >
                         {msg.type === "user" ? (
                           <User size={16} className="text-white" />
+                        ) : msg.isError ? (
+                          <AlertCircle size={16} className="text-white" />
                         ) : (
                           <Bot size={16} className="text-white" />
                         )}
@@ -515,6 +567,8 @@ const ChatInterface = () => {
                         className={`px-5 py-4 rounded-2xl shadow-sm ${
                           msg.type === "user"
                             ? "bg-blue-600 text-white"
+                            : msg.isError
+                            ? "bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 border border-red-200 dark:border-red-800"
                             : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700"
                         }`}
                       >
