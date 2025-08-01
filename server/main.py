@@ -12,7 +12,7 @@ url = os.getenv("AZURE_OPENAI_ENDPOINT")
 app = FastAPI()
 
 origins = [
-    "http://localhost:5173"
+    "https://nirdeshak-ai.vercel.app/"
 ]
 
 app.add_middleware(
