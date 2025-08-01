@@ -1,4 +1,6 @@
-const BASE_URL = "https://nirdeshakai.onrender.com";
+// const BASE_URL = "https://nirdeshakai.onrender.com";
+const BASE_URL = "http://localhost:8000";
+
 
 class APIService {
   constructor() {
@@ -57,6 +59,17 @@ class APIService {
   // Get base URL for debugging
   getBaseURL() {
     return this.baseURL;
+  }
+
+  async transcribeAudio(audioBlob) {
+    const formData = new FormData();
+    formData.append("file", audioBlob, "audio.wav");
+    const response = await fetch(`${this.baseURL}/transcribe`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error("Transcription failed");
+    return await response.json();
   }
 }
 

@@ -26,9 +26,12 @@ const ChatInterface = () => {
   const [speechProcessing, setSpeechProcessing] = useState(false);
   const [apiError, setApiError] = useState(null);
   const [isBackendConnected, setIsBackendConnected] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const {
     isListening,
@@ -139,6 +142,62 @@ const ChatInterface = () => {
     }
   };
 
+  const handleSarvamVoiceInput = async () => {
+    if (!navigator.mediaDevices) {
+      alert("Audio recording not supported in this browser.");
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new window.MediaRecorder(stream);
+    let chunks = [];
+    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(chunks, { type: "audio/wav" });
+      try {
+        const { transcript } = await apiService.transcribeAudio(audioBlob);
+        setMessage(transcript);
+      } catch (err) {
+        alert("Transcription failed: " + err.message);
+      }
+    };
+    mediaRecorder.start();
+    setTimeout(() => mediaRecorder.stop(), 5000); // Record for 5 seconds
+  };
+
+  const handleStartRecording = async () => {
+    setIsRecording(true);
+    audioChunksRef.current = [];
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorderRef.current = new window.MediaRecorder(stream);
+    mediaRecorderRef.current.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    mediaRecorderRef.current.onstop = async () => {
+      setIsRecording(false);
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+      const formData = new FormData();
+      formData.append("file", audioBlob, "audio.wav");
+      // Send to backend
+      const response = await fetch("http://127.0.0.1:8000/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.transcript) {
+        setMessage(data.transcript); // or handle as needed
+      } else {
+        alert(data.error || "Transcription failed");
+      }
+    };
+    mediaRecorderRef.current.start();
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!validateInput(message) || isLoading) return;
 
@@ -159,6 +218,7 @@ const ChatInterface = () => {
     try {
       // Call the real API
       const aiResponse = await apiService.sendMessage(currentMessage);
+      
 
       const responseMessage = {
         id: generateMessageId(),
@@ -356,7 +416,8 @@ const ChatInterface = () => {
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={handleVoiceInput}
+
+                          onClick={handleSarvamVoiceInput} // <-- Use this for SarvamAI backend
                           disabled={
                             !browserSupportsSpeechRecognition || !isOnline
                           }

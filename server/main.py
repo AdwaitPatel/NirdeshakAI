@@ -1,27 +1,33 @@
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sarvamai import SarvamAI
 import requests
 import os
 import dotenv
+import tempfile
 
 dotenv.load_dotenv()
 
 api_key = os.getenv("AZURE_OPENAI_API_KEY")
 url = os.getenv("AZURE_OPENAI_ENDPOINT")
+sarvam_api_key = os.getenv("SARVAM_API_KEY")
+sarvam_client = SarvamAI(api_subscription_key=sarvam_api_key)
 
 app = FastAPI()
 
 origins = [
-    "https://nirdeshak-ai.vercel.app"
+    # "https://nirdeshak-ai.vercel.app",
+    "http://localhost:5173"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins = origins,  
+    allow_origins = ["*"],  
     allow_credentials = True,
     allow_methods = ["*"],
     allow_headers = ["*"],
-)
+)    
 
 headers = {
     "api-key": api_key,
@@ -77,4 +83,25 @@ async def query_service(user_prompt: str = Form(...)):
         return reply
     else:
         return "I am not able to process this request at the moment. Please try again later."
+
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            contents = await file.read()
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        with open(tmp_path, "rb") as audio_file:
+            result = sarvam_client.speech_to_text.transcribe(
+                file=audio_file,
+                model="saarika:v2.5",
+                language_code="en-IN"
+            )
+        return {"transcript": result.transcript}
+    except Exception as e:
+
+        return JSONResponse(status_code=500, content={"error": str(e)})    
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
