@@ -12,7 +12,7 @@ url = os.getenv("AZURE_OPENAI_ENDPOINT")
 app = FastAPI()
 
 origins = [
-    "https://nirdeshak-ai.vercel.app/"
+    "https://nirdeshak-ai.vercel.app"
 ]
 
 app.add_middleware(
@@ -30,6 +30,7 @@ headers = {
 
 @app.post("/query")
 async def query_service(user_prompt: str = Form(...)):    
+    print(f"Received user prompt: {user_prompt}")
     data = {
         "model": "gpt-4o",
         "messages": [
