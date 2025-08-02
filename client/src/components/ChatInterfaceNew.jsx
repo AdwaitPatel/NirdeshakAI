@@ -58,6 +58,178 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Function to parse markdown-style content
+  const parseMarkdownContent = (content) => {
+    // Split content by lines to handle headings and different formatting
+    const lines = content.split("\n");
+    const parsedLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Check for headings (### text)
+      if (line.startsWith("### ")) {
+        const headingText = line.substring(4).trim();
+        parsedLines.push({
+          type: "heading",
+          content: headingText,
+          key: `heading-${i}`,
+        });
+      }
+      // Check for subheadings (## text)
+      else if (line.startsWith("## ")) {
+        const headingText = line.substring(3).trim();
+        parsedLines.push({
+          type: "subheading",
+          content: headingText,
+          key: `subheading-${i}`,
+        });
+      }
+      // Check for bullet points (- text or * text)
+      else if (line.match(/^[\s]*[-*]\s+/)) {
+        const bulletText = line.replace(/^[\s]*[-*]\s+/, "").trim();
+        parsedLines.push({
+          type: "bullet",
+          content: bulletText,
+          key: `bullet-${i}`,
+        });
+      }
+      // Check for numbered lists (1. text, 2. text, etc.)
+      else if (line.match(/^[\s]*\d+\.\s+/)) {
+        const numberedText = line.replace(/^[\s]*\d+\.\s+/, "").trim();
+        parsedLines.push({
+          type: "numbered",
+          content: numberedText,
+          key: `numbered-${i}`,
+        });
+      }
+      // Check for bold text within lines or other formatting
+      else if (line.includes("**") || line.includes("`")) {
+        const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+        const formattedParts = parts.map((part, partIndex) => {
+          if (part.startsWith("**") && part.endsWith("**")) {
+            return {
+              type: "bold",
+              content: part.slice(2, -2),
+              key: `bold-${i}-${partIndex}`,
+            };
+          } else if (part.startsWith("`") && part.endsWith("`")) {
+            return {
+              type: "code",
+              content: part.slice(1, -1),
+              key: `code-${i}-${partIndex}`,
+            };
+          }
+          return {
+            type: "text",
+            content: part,
+            key: `text-${i}-${partIndex}`,
+          };
+        });
+        parsedLines.push({
+          type: "paragraph",
+          parts: formattedParts,
+          key: `paragraph-${i}`,
+        });
+      }
+      // Regular text line
+      else if (line.trim()) {
+        parsedLines.push({
+          type: "text",
+          content: line,
+          key: `text-${i}`,
+        });
+      }
+      // Empty line for spacing
+      else {
+        parsedLines.push({
+          type: "space",
+          key: `space-${i}`,
+        });
+      }
+    }
+
+    return parsedLines;
+  };
+
+  // Function to render parsed content
+  const renderParsedContent = (parsedContent) => {
+    return parsedContent.map((element) => {
+      switch (element.type) {
+        case "heading":
+          return (
+            <div
+              key={element.key}
+              className="text-lg font-bold text-gray-900 dark:text-white mb-3 mt-4 first:mt-0 border-b border-gray-200 dark:border-gray-600 pb-1"
+            >
+              {element.content}
+            </div>
+          );
+        case "subheading":
+          return (
+            <div
+              key={element.key}
+              className="text-base font-semibold text-gray-900 dark:text-white mb-2 mt-3 first:mt-0"
+            >
+              {element.content}
+            </div>
+          );
+        case "bullet":
+          return (
+            <div key={element.key} className="flex items-start mb-1 ml-4">
+              <span className="text-blue-600 dark:text-blue-400 mr-2 mt-1">
+                •
+              </span>
+              <span>{element.content}</span>
+            </div>
+          );
+        case "numbered":
+          return (
+            <div key={element.key} className="mb-1 ml-4">
+              {element.content}
+            </div>
+          );
+        case "paragraph":
+          return (
+            <div key={element.key} className="mb-2">
+              {element.parts.map((part) => {
+                if (part.type === "bold") {
+                  return (
+                    <span
+                      key={part.key}
+                      className="font-bold text-gray-900 dark:text-white"
+                    >
+                      {part.content}
+                    </span>
+                  );
+                } else if (part.type === "code") {
+                  return (
+                    <span
+                      key={part.key}
+                      className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm font-mono"
+                    >
+                      {part.content}
+                    </span>
+                  );
+                }
+                return <span key={part.key}>{part.content}</span>;
+              })}
+            </div>
+          );
+        case "text":
+          return (
+            <div key={element.key} className="mb-1">
+              {element.content}
+            </div>
+          );
+        case "space":
+          return <div key={element.key} className="mb-2"></div>;
+        default:
+          return null;
+      }
+    });
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -231,7 +403,6 @@ const ChatInterface = () => {
     try {
       // Call the real API
       const aiResponse = await apiService.sendMessage(currentMessage);
-      
 
       const responseMessage = {
         id: generateMessageId(),
@@ -289,7 +460,7 @@ const ChatInterface = () => {
     "How to apply for gas connection?",
     "Water connection application",
     "How to get police verification?",
-    "Bank account opening process"
+    "Bank account opening process",
   ];
 
   // Get random questions
@@ -304,11 +475,13 @@ const ChatInterface = () => {
     return shuffled.slice(0, 2);
   };
 
-  const [suggestedQuestions, setSuggestedQuestions] = useState(getRandomQuestions());
+  const [suggestedQuestions, setSuggestedQuestions] = useState(
+    getRandomQuestions()
+  );
 
   const handleSuggestionClick = async (suggestion) => {
     setIsFirstVisit(false);
-    
+
     // Create the user message
     const userMessage = {
       id: generateMessageId(),
@@ -320,14 +493,14 @@ const ChatInterface = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
     setApiError(null);
-    
+
     // Clear the search box immediately after starting the search
     setMessage("");
 
     try {
       // Call the real API
       const aiResponse = await apiService.sendMessage(suggestion.trim());
-      
+
       const responseMessage = {
         id: generateMessageId(),
         type: "ai",
@@ -360,23 +533,23 @@ const ChatInterface = () => {
   const startNewChat = () => {
     // Save current chat to recent chats if there are messages
     if (messages.length > 0) {
-      const userMessages = messages.filter(msg => msg.type === "user");
+      const userMessages = messages.filter((msg) => msg.type === "user");
       if (userMessages.length > 0) {
         // Only save the first chat from this session
         const firstUserMessage = userMessages[0];
         addToRecentChats(firstUserMessage.content);
       }
     }
-    
+
     setMessages([]);
     setMessage("");
     setIsFirstVisit(true);
   };
 
   const addToRecentChats = (question) => {
-    setRecentChats(prev => {
+    setRecentChats((prev) => {
       // Remove the question if it already exists
-      const filtered = prev.filter(chat => chat.question !== question);
+      const filtered = prev.filter((chat) => chat.question !== question);
       // Add the new question at the beginning
       const updated = [
         {
@@ -384,7 +557,7 @@ const ChatInterface = () => {
           question: question,
           timestamp: new Date(),
         },
-        ...filtered
+        ...filtered,
       ];
       // Keep only the last 10 chats
       return updated.slice(0, 10);
@@ -426,7 +599,7 @@ const ChatInterface = () => {
     const remainingText = text.slice(startIndex);
 
     const utterance = new window.SpeechSynthesisUtterance(remainingText);
-    
+
     // Enhanced language detection for Indian regional languages
     const hasHindi = /[\u0900-\u097F]/.test(text);
     const hasEnglish = /[a-zA-Z]/.test(text);
@@ -437,21 +610,55 @@ const ChatInterface = () => {
     const hasTelugu = /[\u0C00-\u0C7F]/.test(text);
     const hasKannada = /[\u0C80-\u0CFF]/.test(text);
     const hasMalayalam = /[\u0D00-\u0D7F]/.test(text);
-    const hasMarathi = /[\u0900-\u097F]/.test(text) && /[\u0924\u0930\u0915\u093E\u0930\u0924]/.test(text);
+    const hasMarathi =
+      /[\u0900-\u097F]/.test(text) &&
+      /[\u0924\u0930\u0915\u093E\u0930\u0924]/.test(text);
     const hasOdia = /[\u0B00-\u0B7F]/.test(text);
-    const hasAssamese = /[\u0980-\u09FF]/.test(text) && /[\u0985\u09B8\u09AE\u09C0\u09AF\u09BC]/.test(text);
-    
+    const hasAssamese =
+      /[\u0980-\u09FF]/.test(text) &&
+      /[\u0985\u09B8\u09AE\u09C0\u09AF\u09BC]/.test(text);
+
     // Get available voices and wait for them to load
     let voices = window.speechSynthesis.getVoices();
-    
+
     // If voices aren't loaded yet, wait for them
     if (voices.length === 0) {
       window.speechSynthesis.onvoiceschanged = () => {
         voices = window.speechSynthesis.getVoices();
-        setVoiceForUtterance(utterance, voices, hasHindi, hasEnglish, hasPunjabi, hasGujarati, hasBengali, hasTamil, hasTelugu, hasKannada, hasMalayalam, hasMarathi, hasOdia, hasAssamese);
+        setVoiceForUtterance(
+          utterance,
+          voices,
+          hasHindi,
+          hasEnglish,
+          hasPunjabi,
+          hasGujarati,
+          hasBengali,
+          hasTamil,
+          hasTelugu,
+          hasKannada,
+          hasMalayalam,
+          hasMarathi,
+          hasOdia,
+          hasAssamese
+        );
       };
     } else {
-      setVoiceForUtterance(utterance, voices, hasHindi, hasEnglish, hasPunjabi, hasGujarati, hasBengali, hasTamil, hasTelugu, hasKannada, hasMalayalam, hasMarathi, hasOdia, hasAssamese);
+      setVoiceForUtterance(
+        utterance,
+        voices,
+        hasHindi,
+        hasEnglish,
+        hasPunjabi,
+        hasGujarati,
+        hasBengali,
+        hasTamil,
+        hasTelugu,
+        hasKannada,
+        hasMalayalam,
+        hasMarathi,
+        hasOdia,
+        hasAssamese
+      );
     }
 
     utterance.rate = 0.9; // Natural speaking rate
@@ -494,66 +701,113 @@ const ChatInterface = () => {
   };
 
   // Helper function to set the best voice for each language
-  const setVoiceForUtterance = (utterance, voices, hasHindi, hasEnglish, hasPunjabi, hasGujarati, hasBengali, hasTamil, hasTelugu, hasKannada, hasMalayalam, hasMarathi, hasOdia, hasAssamese) => {
+  const setVoiceForUtterance = (
+    utterance,
+    voices,
+    hasHindi,
+    hasEnglish,
+    hasPunjabi,
+    hasGujarati,
+    hasBengali,
+    hasTamil,
+    hasTelugu,
+    hasKannada,
+    hasMalayalam,
+    hasMarathi,
+    hasOdia,
+    hasAssamese
+  ) => {
     // Priority order for voice selection
     const voicePreferences = {
-      hindi: ['hi-IN', 'hi-IN-x-ABC', 'hi-IN-x-ABD', 'hi-IN-x-ABE'],
-      english: ['en-IN', 'en-IN-x-ABC', 'en-IN-x-ABD'],
-      punjabi: ['pa-IN', 'pa-IN-x-ABC'],
-      gujarati: ['gu-IN', 'gu-IN-x-ABC'],
-      bengali: ['bn-IN', 'bn-IN-x-ABC'],
-      tamil: ['ta-IN', 'ta-IN-x-ABC'],
-      telugu: ['te-IN', 'te-IN-x-ABC'],
-      kannada: ['kn-IN', 'kn-IN-x-ABC'],
-      malayalam: ['ml-IN', 'ml-IN-x-ABC'],
-      marathi: ['mr-IN', 'mr-IN-x-ABC'],
-      odia: ['or-IN', 'or-IN-x-ABC'],
-      assamese: ['as-IN', 'as-IN-x-ABC']
+      hindi: ["hi-IN", "hi-IN-x-ABC", "hi-IN-x-ABD", "hi-IN-x-ABE"],
+      english: ["en-IN", "en-IN-x-ABC", "en-IN-x-ABD"],
+      punjabi: ["pa-IN", "pa-IN-x-ABC"],
+      gujarati: ["gu-IN", "gu-IN-x-ABC"],
+      bengali: ["bn-IN", "bn-IN-x-ABC"],
+      tamil: ["ta-IN", "ta-IN-x-ABC"],
+      telugu: ["te-IN", "te-IN-x-ABC"],
+      kannada: ["kn-IN", "kn-IN-x-ABC"],
+      malayalam: ["ml-IN", "ml-IN-x-ABC"],
+      marathi: ["mr-IN", "mr-IN-x-ABC"],
+      odia: ["or-IN", "or-IN-x-ABC"],
+      assamese: ["as-IN", "as-IN-x-ABC"],
     };
 
     let selectedVoice = null;
-    let selectedLang = 'en-IN'; // default
+    let selectedLang = "en-IN"; // default
 
     if (hasHindi || (hasHindi && hasEnglish)) {
-      selectedLang = 'hi-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.hindi, 'hindi');
+      selectedLang = "hi-IN";
+      selectedVoice = findBestVoice(voices, voicePreferences.hindi, "hindi");
     } else if (hasEnglish) {
-      selectedLang = 'en-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.english, 'english');
+      selectedLang = "en-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.english,
+        "english"
+      );
     } else if (hasPunjabi) {
-      selectedLang = 'pa-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.punjabi, 'punjabi');
+      selectedLang = "pa-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.punjabi,
+        "punjabi"
+      );
     } else if (hasGujarati) {
-      selectedLang = 'gu-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.gujarati, 'gujarati');
+      selectedLang = "gu-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.gujarati,
+        "gujarati"
+      );
     } else if (hasBengali) {
-      selectedLang = 'bn-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.bengali, 'bengali');
+      selectedLang = "bn-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.bengali,
+        "bengali"
+      );
     } else if (hasTamil) {
-      selectedLang = 'ta-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.tamil, 'tamil');
+      selectedLang = "ta-IN";
+      selectedVoice = findBestVoice(voices, voicePreferences.tamil, "tamil");
     } else if (hasTelugu) {
-      selectedLang = 'te-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.telugu, 'telugu');
+      selectedLang = "te-IN";
+      selectedVoice = findBestVoice(voices, voicePreferences.telugu, "telugu");
     } else if (hasKannada) {
-      selectedLang = 'kn-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.kannada, 'kannada');
+      selectedLang = "kn-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.kannada,
+        "kannada"
+      );
     } else if (hasMalayalam) {
-      selectedLang = 'ml-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.malayalam, 'malayalam');
+      selectedLang = "ml-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.malayalam,
+        "malayalam"
+      );
     } else if (hasMarathi) {
-      selectedLang = 'mr-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.marathi, 'marathi');
+      selectedLang = "mr-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.marathi,
+        "marathi"
+      );
     } else if (hasOdia) {
-      selectedLang = 'or-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.odia, 'odia');
+      selectedLang = "or-IN";
+      selectedVoice = findBestVoice(voices, voicePreferences.odia, "odia");
     } else if (hasAssamese) {
-      selectedLang = 'as-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.assamese, 'assamese');
+      selectedLang = "as-IN";
+      selectedVoice = findBestVoice(
+        voices,
+        voicePreferences.assamese,
+        "assamese"
+      );
     } else {
       // Default to Hindi
-      selectedLang = 'hi-IN';
-      selectedVoice = findBestVoice(voices, voicePreferences.hindi, 'hindi');
+      selectedLang = "hi-IN";
+      selectedVoice = findBestVoice(voices, voicePreferences.hindi, "hindi");
     }
 
     utterance.lang = selectedLang;
@@ -566,81 +820,85 @@ const ChatInterface = () => {
   const findBestVoice = (voices, preferredLangs, languageName) => {
     // Priority 1: Indian female voices with exact language match
     for (const lang of preferredLangs) {
-      const indianFemaleVoice = voices.find(v => 
-        v.lang === lang && 
-        (v.name.toLowerCase().includes('female') || 
-         v.name.toLowerCase().includes('woman') ||
-         v.name.toLowerCase().includes('girl') ||
-         v.name.toLowerCase().includes('priya') ||
-         v.name.toLowerCase().includes('neha') ||
-         v.name.toLowerCase().includes('meera') ||
-         v.name.toLowerCase().includes('ananya') ||
-         v.name.toLowerCase().includes('zara'))
+      const indianFemaleVoice = voices.find(
+        (v) =>
+          v.lang === lang &&
+          (v.name.toLowerCase().includes("female") ||
+            v.name.toLowerCase().includes("woman") ||
+            v.name.toLowerCase().includes("girl") ||
+            v.name.toLowerCase().includes("priya") ||
+            v.name.toLowerCase().includes("neha") ||
+            v.name.toLowerCase().includes("meera") ||
+            v.name.toLowerCase().includes("ananya") ||
+            v.name.toLowerCase().includes("zara"))
       );
       if (indianFemaleVoice) return indianFemaleVoice;
     }
 
     // Priority 2: Any Indian female voice
-    const indianFemaleVoice = voices.find(v => 
-      (v.name.toLowerCase().includes('female') || 
-       v.name.toLowerCase().includes('woman') ||
-       v.name.toLowerCase().includes('girl') ||
-       v.name.toLowerCase().includes('priya') ||
-       v.name.toLowerCase().includes('neha') ||
-       v.name.toLowerCase().includes('meera') ||
-       v.name.toLowerCase().includes('ananya') ||
-       v.name.toLowerCase().includes('zara')) &&
-      (v.name.toLowerCase().includes('india') ||
-       v.name.toLowerCase().includes('indian') ||
-       v.name.toLowerCase().includes('hindi') ||
-       v.name.toLowerCase().includes('bengali') ||
-       v.name.toLowerCase().includes('tamil') ||
-       v.name.toLowerCase().includes('telugu') ||
-       v.name.toLowerCase().includes('marathi') ||
-       v.name.toLowerCase().includes('gujarati') ||
-       v.name.toLowerCase().includes('punjabi') ||
-       v.name.toLowerCase().includes('kannada') ||
-       v.name.toLowerCase().includes('malayalam') ||
-       v.name.toLowerCase().includes('odia') ||
-       v.name.toLowerCase().includes('assamese'))
+    const indianFemaleVoice = voices.find(
+      (v) =>
+        (v.name.toLowerCase().includes("female") ||
+          v.name.toLowerCase().includes("woman") ||
+          v.name.toLowerCase().includes("girl") ||
+          v.name.toLowerCase().includes("priya") ||
+          v.name.toLowerCase().includes("neha") ||
+          v.name.toLowerCase().includes("meera") ||
+          v.name.toLowerCase().includes("ananya") ||
+          v.name.toLowerCase().includes("zara")) &&
+        (v.name.toLowerCase().includes("india") ||
+          v.name.toLowerCase().includes("indian") ||
+          v.name.toLowerCase().includes("hindi") ||
+          v.name.toLowerCase().includes("bengali") ||
+          v.name.toLowerCase().includes("tamil") ||
+          v.name.toLowerCase().includes("telugu") ||
+          v.name.toLowerCase().includes("marathi") ||
+          v.name.toLowerCase().includes("gujarati") ||
+          v.name.toLowerCase().includes("punjabi") ||
+          v.name.toLowerCase().includes("kannada") ||
+          v.name.toLowerCase().includes("malayalam") ||
+          v.name.toLowerCase().includes("odia") ||
+          v.name.toLowerCase().includes("assamese"))
     );
     if (indianFemaleVoice) return indianFemaleVoice;
 
     // Priority 3: Exact language match (any gender)
     for (const lang of preferredLangs) {
-      const voice = voices.find(v => v.lang === lang);
+      const voice = voices.find((v) => v.lang === lang);
       if (voice) return voice;
     }
 
     // Priority 4: Partial language match (any gender)
     for (const lang of preferredLangs) {
-      const voice = voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+      const voice = voices.find((v) => v.lang.startsWith(lang.split("-")[0]));
       if (voice) return voice;
     }
 
     // Priority 5: Any Indian voice
-    const indianVoice = voices.find(v => 
-      v.name.toLowerCase().includes('india') ||
-      v.name.toLowerCase().includes('indian') ||
-      v.name.toLowerCase().includes('hindi') ||
-      v.name.toLowerCase().includes('bengali') ||
-      v.name.toLowerCase().includes('tamil') ||
-      v.name.toLowerCase().includes('telugu') ||
-      v.name.toLowerCase().includes('marathi') ||
-      v.name.toLowerCase().includes('gujarati') ||
-      v.name.toLowerCase().includes('punjabi') ||
-      v.name.toLowerCase().includes('kannada') ||
-      v.name.toLowerCase().includes('malayalam') ||
-      v.name.toLowerCase().includes('odia') ||
-      v.name.toLowerCase().includes('assamese')
+    const indianVoice = voices.find(
+      (v) =>
+        v.name.toLowerCase().includes("india") ||
+        v.name.toLowerCase().includes("indian") ||
+        v.name.toLowerCase().includes("hindi") ||
+        v.name.toLowerCase().includes("bengali") ||
+        v.name.toLowerCase().includes("tamil") ||
+        v.name.toLowerCase().includes("telugu") ||
+        v.name.toLowerCase().includes("marathi") ||
+        v.name.toLowerCase().includes("gujarati") ||
+        v.name.toLowerCase().includes("punjabi") ||
+        v.name.toLowerCase().includes("kannada") ||
+        v.name.toLowerCase().includes("malayalam") ||
+        v.name.toLowerCase().includes("odia") ||
+        v.name.toLowerCase().includes("assamese")
     );
     if (indianVoice) return indianVoice;
 
     // Priority 6: Any female voice
-    const femaleVoice = voices.find(v => 
-      v.name.toLowerCase().includes('female') || 
-      v.name.toLowerCase().includes('woman') ||
-      v.name.toLowerCase().includes('girl')
+    const femaleVoice = voices.find(
+      (v) =>
+        v.name.toLowerCase().includes("female") ||
+        v.name.toLowerCase().includes("woman") ||
+        v.name.toLowerCase().includes("girl")
     );
     if (femaleVoice) return femaleVoice;
 
@@ -654,7 +912,7 @@ const ChatInterface = () => {
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 xl:hidden">
           {/* Backdrop */}
-          <div 
+          <div
             className="absolute inset-0 bg-black bg-opacity-50"
             onClick={() => setIsMobileMenuOpen(false)}
           />
@@ -673,8 +931,18 @@ const ChatInterface = () => {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="ml-3 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
@@ -705,8 +973,18 @@ const ChatInterface = () => {
                     >
                       <div className="flex items-start space-x-3">
                         <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
-                          <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          <svg
+                            className="w-3 h-3 text-blue-600 dark:text-blue-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                            />
                           </svg>
                         </div>
                         <div className="flex-1 min-w-0">
@@ -714,7 +992,11 @@ const ChatInterface = () => {
                             {chat.question}
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {chat.timestamp.toLocaleDateString()} • {chat.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {chat.timestamp.toLocaleDateString()} •{" "}
+                            {chat.timestamp.toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </div>
                         </div>
                       </div>
@@ -778,8 +1060,18 @@ const ChatInterface = () => {
                 >
                   <div className="flex items-start space-x-3">
                     <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      <svg
+                        className="w-3 h-3 text-blue-600 dark:text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -787,7 +1079,11 @@ const ChatInterface = () => {
                         {chat.question}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {chat.timestamp.toLocaleDateString()} • {chat.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {chat.timestamp.toLocaleDateString()} •{" "}
+                        {chat.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
                   </div>
@@ -820,11 +1116,14 @@ const ChatInterface = () => {
         {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700 p-2 xs:p-3 sm:p-4 flex items-center justify-between bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
           <div className="flex items-center space-x-1 xs:space-x-2 sm:space-x-3">
-            <button 
+            <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="xl:hidden"
             >
-              <Menu size={16} className="text-gray-600 dark:text-gray-400 xs:w-4 xs:h-4 sm:w-5 sm:h-5" />
+              <Menu
+                size={16}
+                className="text-gray-600 dark:text-gray-400 xs:w-4 xs:h-4 sm:w-5 sm:h-5"
+              />
             </button>
             <div className="flex items-center space-x-1 xs:space-x-2 sm:space-x-3">
               <img
@@ -855,7 +1154,10 @@ const ChatInterface = () => {
               {isBackendConnected ? "Connected" : "Disconnected"}
             </span>
             {!isBackendConnected && (
-              <AlertCircle size={12} className="text-red-500 xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
+              <AlertCircle
+                size={12}
+                className="text-red-500 xs:w-3 xs:h-3 sm:w-4 sm:h-4"
+              />
             )}
           </div>
         </div>
@@ -919,44 +1221,44 @@ const ChatInterface = () => {
                       />
 
                       <div className="flex space-x-1">
-                                            <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleSarvamVoiceInput}
-                      disabled={
-                        !browserSupportsSpeechRecognition || !isOnline
-                      }
-                      className={`p-3 rounded-xl transition-all duration-300 relative ${
-                        !browserSupportsSpeechRecognition || !isOnline
-                          ? "text-gray-300 cursor-not-allowed bg-gray-100 dark:bg-gray-700"
-                          : isListening
-                          ? "bg-red-500 text-white shadow-lg shadow-red-500/25"
-                          : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                      }`}
-                      title={
-                        !browserSupportsSpeechRecognition
-                          ? "Speech recognition not supported in this browser"
-                          : !isOnline
-                          ? "Speech recognition requires internet connection"
-                          : isListening
-                          ? "Click to stop listening"
-                          : "Click to start voice input"
-                      }
-                    >
-                      {isListening && (
-                        <div className="absolute inset-0 rounded-xl bg-red-500 animate-pulse"></div>
-                      )}
-                      <div className="relative z-10">
-                        {isListening ? (
-                          <MicOff size={22} />
-                        ) : (
-                          <Mic size={22} />
-                        )}
-                      </div>
-                      {isListening && (
-                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
-                      )}
-                    </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={handleSarvamVoiceInput}
+                          disabled={
+                            !browserSupportsSpeechRecognition || !isOnline
+                          }
+                          className={`p-3 rounded-xl transition-all duration-300 relative ${
+                            !browserSupportsSpeechRecognition || !isOnline
+                              ? "text-gray-300 cursor-not-allowed bg-gray-100 dark:bg-gray-700"
+                              : isListening
+                              ? "bg-red-500 text-white shadow-lg shadow-red-500/25"
+                              : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          }`}
+                          title={
+                            !browserSupportsSpeechRecognition
+                              ? "Speech recognition not supported in this browser"
+                              : !isOnline
+                              ? "Speech recognition requires internet connection"
+                              : isListening
+                              ? "Click to stop listening"
+                              : "Click to start voice input"
+                          }
+                        >
+                          {isListening && (
+                            <div className="absolute inset-0 rounded-xl bg-red-500 animate-pulse"></div>
+                          )}
+                          <div className="relative z-10">
+                            {isListening ? (
+                              <MicOff size={22} />
+                            ) : (
+                              <Mic size={22} />
+                            )}
+                          </div>
+                          {isListening && (
+                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
+                          )}
+                        </motion.button>
 
                         <motion.button
                           whileHover={{ scale: 1.05 }}
@@ -1099,7 +1401,7 @@ const ChatInterface = () => {
                     </motion.button>
                   ))}
                 </div>
-                
+
                 {/* Mobile: Show only first 2 questions */}
                 <div className="sm:hidden">
                   {suggestedQuestions.slice(0, 2).map((question, index) => (
@@ -1132,92 +1434,148 @@ const ChatInterface = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.4 }}
-                    className={`flex ${msg.type === "user" ? "justify-end" : "justify-start"}`}
+                    className={`flex ${
+                      msg.type === "user" ? "justify-end" : "justify-start"
+                    }`}
                   >
-                    <div className={`flex space-x-1 xs:space-x-2 sm:space-x-3 max-w-3xl ${msg.type === "user" ? "flex-row-reverse space-x-reverse" : ""}`}>
-          <div
-            className={`w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${
-              msg.type === "user"
-                ? "bg-blue-600"
-                : msg.isError
-                ? "bg-red-500"
-                : "bg-white dark:bg-gray-800"
-            }`}
-          >
-            {msg.type === "user" ? (
-              <User size={12} className="text-white xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
-            ) : msg.isError ? (
-              <AlertCircle size={12} className="text-white xs:w-3 xs:h-3 sm:w-4 sm:h-4" />
-            ) : (
-              <img 
-                src="https://downloads.marketplace.jetbrains.com/files/21239/394982/icon/default.png" 
-                alt="NirdeshakAI" 
-                className="w-3 h-3 xs:w-4 xs:h-4 sm:w-5 sm:h-5 rounded-full"
-              />
-            )}
-          </div>
-          <div
-            className={`relative px-2 xs:px-3 sm:px-5 py-2 xs:py-3 sm:py-4 rounded-2xl shadow-sm ${
-              msg.type === "user"
-                ? "bg-blue-600 text-white"
-                : msg.isError
-                ? "bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 border border-red-200 dark:border-red-800"
-                : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700"
-            }`}
-          >
-            {/* Speaker button for AI messages - upper right */}
-            {msg.type === "ai" && !msg.isError && (
-              <button
-                onClick={() => handlePlayTTS(msg.content)}
-                className="absolute top-2 right-2 z-10 p-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 focus:outline-none transform hover:scale-105"
-                title="Listen"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="text-white">
-                  <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
-                  <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>
-                  <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/>
-                </svg>
-              </button>
-            )}
-            <div className="text-xs xs:text-sm leading-relaxed whitespace-pre-wrap font-inter pr-8">
-              {msg.content.split(/(https?:\/\/[^\s]+)/g).map((part, index) => {
-                // Check if this part is a URL and clean it
-                const urlRegex = /^https?:\/\/[^\s]+$/;
-                if (urlRegex.test(part)) {
-                  // Remove any parentheses around the URL
-                  const cleanUrl = part.replace(/^[\(\)]*/, '').replace(/[\(\)]*$/, '');
-                  return (
-                    <div key={index} className="my-2">
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">
-                        🔗 Official Website:
+                    <div
+                      className={`flex space-x-1 xs:space-x-2 sm:space-x-3 max-w-3xl ${
+                        msg.type === "user"
+                          ? "flex-row-reverse space-x-reverse"
+                          : ""
+                      }`}
+                    >
+                      <div
+                        className={`w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${
+                          msg.type === "user"
+                            ? "bg-blue-600"
+                            : msg.isError
+                            ? "bg-red-500"
+                            : "bg-white dark:bg-gray-800"
+                        }`}
+                      >
+                        {msg.type === "user" ? (
+                          <User
+                            size={12}
+                            className="text-white xs:w-3 xs:h-3 sm:w-4 sm:h-4"
+                          />
+                        ) : msg.isError ? (
+                          <AlertCircle
+                            size={12}
+                            className="text-white xs:w-3 xs:h-3 sm:w-4 sm:h-4"
+                          />
+                        ) : (
+                          <img
+                            src="https://downloads.marketplace.jetbrains.com/files/21239/394982/icon/default.png"
+                            alt="NirdeshakAI"
+                            className="w-3 h-3 xs:w-4 xs:h-4 sm:w-5 sm:h-5 rounded-full"
+                          />
+                        )}
                       </div>
-                      <div className="border border-blue-200 dark:border-blue-700 rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
-                        <a
-                          href={cleanUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 font-medium hover:text-blue-800 dark:hover:text-blue-300 transition-colors break-all flex items-center"
+                      <div
+                        className={`relative px-2 xs:px-3 sm:px-5 py-2 xs:py-3 sm:py-4 rounded-2xl shadow-sm ${
+                          msg.type === "user"
+                            ? "bg-blue-600 text-white"
+                            : msg.isError
+                            ? "bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 border border-red-200 dark:border-red-800"
+                            : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700"
+                        }`}
+                      >
+                        {/* Speaker button for AI messages - upper right */}
+                        {msg.type === "ai" && !msg.isError && (
+                          <button
+                            onClick={() => handlePlayTTS(msg.content)}
+                            className="absolute top-2 right-2 z-10 p-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 focus:outline-none transform hover:scale-105"
+                            title="Listen"
+                          >
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              className="text-white"
+                            >
+                              <path
+                                d="M3 9v6h4l5 5V4L7 9H3z"
+                                fill="currentColor"
+                              />
+                              <path
+                                d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"
+                                fill="currentColor"
+                              />
+                              <path
+                                d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+                                fill="currentColor"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                        <div className="text-xs xs:text-sm leading-relaxed font-inter pr-8">
+                          {(() => {
+                            // First, split content by URLs to handle them separately
+                            const urlParts =
+                              msg.content.split(/(https?:\/\/[^\s]+)/g);
+
+                            return urlParts.map((part, index) => {
+                              // Check if this part is a URL
+                              const urlRegex = /^https?:\/\/[^\s]+$/;
+                              if (urlRegex.test(part)) {
+                                // Remove any parentheses around the URL
+                                const cleanUrl = part
+                                  .replace(/^[()]*/, "")
+                                  .replace(/[()]*$/, "");
+                                return (
+                                  <div key={index} className="my-2">
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">
+                                      🔗 Official Website:
+                                    </div>
+                                    <div className="border border-blue-200 dark:border-blue-700 rounded-lg p-3 bg-blue-50 dark:bg-blue-900/20">
+                                      <a
+                                        href={cleanUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 dark:text-blue-400 font-medium hover:text-blue-800 dark:hover:text-blue-300 transition-colors break-all flex items-center"
+                                      >
+                                        <svg
+                                          className="w-4 h-4 mr-2 flex-shrink-0"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                          />
+                                        </svg>
+                                        {cleanUrl}
+                                      </a>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              // For non-URL parts, parse markdown content
+                              const parsedContent = parseMarkdownContent(part);
+                              return (
+                                <div key={index}>
+                                  {renderParsedContent(parsedContent)}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                        <div
+                          className={`text-xs mt-1 xs:mt-2 sm:mt-3 opacity-70 font-mono`}
                         >
-                          <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                          {cleanUrl}
-                        </a>
+                          {msg.timestamp.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
                       </div>
                     </div>
-                  );
-                }
-                return part;
-              })}
-            </div>
-            <div className={`text-xs mt-1 xs:mt-2 sm:mt-3 opacity-70 font-mono`}>
-              {msg.timestamp.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </div>
-          </div>
-        </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -1230,9 +1588,9 @@ const ChatInterface = () => {
                 >
                   <div className="flex space-x-3">
                     <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-lg">
-                      <img 
-                        src="https://downloads.marketplace.jetbrains.com/files/21239/394982/icon/default.png" 
-                        alt="NirdeshakAI" 
+                      <img
+                        src="https://downloads.marketplace.jetbrains.com/files/21239/394982/icon/default.png"
+                        alt="NirdeshakAI"
                         className="w-4 h-4 rounded-full"
                       />
                     </div>
