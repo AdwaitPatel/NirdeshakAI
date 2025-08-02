@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from sarvamai import SarvamAI
+from sarvamai.play import play, save
+
 import requests
 import os
 import dotenv
@@ -105,3 +107,18 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/tts")
+async def tts_service(text: str = Form(...)):
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tmp_path = tmp.name
+            result = sarvam_client.text_to_speech.synthesize(
+                text=text,
+                model="samvad:v1.0",  # Use the correct model for TTS
+                language_code="en-IN",  # Change as needed
+                output_file=tmp_path
+            )
+        return FileResponse(tmp_path, media_type="audio/mpeg", filename="speech.mp3")
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
