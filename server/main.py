@@ -54,7 +54,6 @@ headers = {
 
 @app.get("/", response_class=HTMLResponse)
 async def health_check():
-    """Health check endpoint that serves a professional HTML page."""
     try:
         # Read the HTML file
         html_file_path = os.path.join(os.path.dirname(__file__), "health_check.html")
