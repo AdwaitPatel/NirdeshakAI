@@ -16,6 +16,8 @@ dotenv.load_dotenv()
 
 api_key = os.getenv("AZURE_OPENAI_API_KEY")
 url = os.getenv("AZURE_OPENAI_ENDPOINT")
+sarvam_api_key = os.getenv("SARVAM_API_KEY")
+sarvam_client = SarvamAI(api_subscription_key=sarvam_api_key)
 
 # Validate environment variables
 if not api_key:
@@ -34,16 +36,16 @@ class ChatRequest(BaseModel):
     conversation_history: List[Dict[str, Any]]
 
 origins = [
-    "http://localhost:5173"
+    "https://nirdeshak-ai.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins = origins,  
+    allow_origins = ["*"],  
     allow_credentials = True,
     allow_methods = ["*"],
     allow_headers = ["*"],
-)
+)    
 
 headers = {
     "api-key": api_key,
@@ -200,3 +202,39 @@ async def query_service(request: ChatRequest) -> Union[str, Dict[str, str]]:
         logger.error(f"Unexpected error in query_service: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            contents = await file.read()
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        with open(tmp_path, "rb") as audio_file:
+            result = sarvam_client.speech_to_text.transcribe(
+                file=audio_file,
+                model="saarika:v2.5",
+                language_code="en-IN"
+            )
+        return {"transcript": result.transcript}
+    except Exception as e:
+
+        return JSONResponse(status_code=500, content={"error": str(e)})    
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/tts")
+async def tts_service(text: str = Form(...)):
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            tmp_path = tmp.name
+            result = sarvam_client.text_to_speech.synthesize(
+                text=text,
+                model="samvad:v1.0",  # Use the correct model for TTS
+                language_code="en-IN",  # Change as needed
+                output_file=tmp_path
+            )
+        return FileResponse(tmp_path, media_type="audio/mpeg", filename="speech.mp3")
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
