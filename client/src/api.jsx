@@ -1,18 +1,31 @@
 const BASE_URL = "https://nirdeshakai.onrender.com";
+// const BASE_URL = "http://localhost:8000";
 
 class APIService {
   constructor() {
     this.baseURL = BASE_URL;
   }
 
-  async sendMessage(userPrompt) {
+  async sendMessage(userPrompt, conversationHistory = []) {
     try {
-      const formData = new FormData();
-      formData.append("user_prompt", userPrompt);
+      // Convert conversation history to the format expected by FastAPI
+      const requestData = {
+        conversation_history: [
+          ...conversationHistory,
+          {
+            type: "user",
+            content: userPrompt,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      };
 
       const response = await fetch(`${this.baseURL}/query`, {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestData),
       });
 
       if (!response.ok) {
@@ -57,6 +70,17 @@ class APIService {
   // Get base URL for debugging
   getBaseURL() {
     return this.baseURL;
+  }
+
+  async transcribeAudio(audioBlob) {
+    const formData = new FormData();
+    formData.append("file", audioBlob, "audio.wav");
+    const response = await fetch(`${this.baseURL}/transcribe`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error("Transcription failed");
+    return await response.json();
   }
 }
 
