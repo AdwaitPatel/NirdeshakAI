@@ -1,5 +1,5 @@
-const BASE_URL = "https://nirdeshakai.onrender.com";
-// const BASE_URL = "http://localhost:8000";
+// const BASE_URL = "https://nirdeshakai.onrender.com";
+const BASE_URL = "http://localhost:8000";
 
 class APIService {
   constructor() {
@@ -15,9 +15,9 @@ class APIService {
           {
             type: "user",
             content: userPrompt,
-            timestamp: new Date().toISOString()
-          }
-        ]
+            timestamp: new Date().toISOString(),
+          },
+        ],
       };
 
       const response = await fetch(`${this.baseURL}/query`, {
