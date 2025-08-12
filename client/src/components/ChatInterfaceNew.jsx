@@ -535,7 +535,8 @@ const ChatInterface = () => {
       const errorMessage = {
         id: generateMessageId(),
         type: "ai",
-        content: `I'm sorry, I'm having trouble connecting to the server right now. Please check if the backend is running on http://localhost:8000 or try again later.\n\nError: ${error.message}`,
+        content: `We’re experiencing temporary connectivity issues.
+Please try again later. If the problem persists, contact support.`,
         timestamp: new Date(),
         isError: true,
       };
