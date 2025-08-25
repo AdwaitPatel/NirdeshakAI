@@ -402,15 +402,18 @@ const ChatInterface = () => {
 
     try {
       // Convert messages to conversation history format for API
-      const conversationHistory = messages.map(msg => ({
+      const conversationHistory = messages.map((msg) => ({
         type: msg.type,
         content: msg.content,
         timestamp: msg.timestamp.toISOString(),
-        isError: msg.isError || false
+        isError: msg.isError || false,
       }));
-      
+
       // Call the real API with conversation history
-      const aiResponse = await apiService.sendMessage(currentMessage, conversationHistory);
+      const aiResponse = await apiService.sendMessage(
+        currentMessage,
+        conversationHistory
+      );
 
       const responseMessage = {
         id: generateMessageId(),
@@ -507,15 +510,18 @@ const ChatInterface = () => {
 
     try {
       // Convert messages to conversation history format for API
-      const conversationHistory = messages.map(msg => ({
+      const conversationHistory = messages.map((msg) => ({
         type: msg.type,
         content: msg.content,
         timestamp: msg.timestamp.toISOString(),
-        isError: msg.isError || false
+        isError: msg.isError || false,
       }));
-      
+
       // Call the real API with conversation history
-      const aiResponse = await apiService.sendMessage(suggestion.trim(), conversationHistory);
+      const aiResponse = await apiService.sendMessage(
+        suggestion.trim(),
+        conversationHistory
+      );
 
       const responseMessage = {
         id: generateMessageId(),
@@ -1529,18 +1535,27 @@ Please try again later. If the problem persists, contact support.`,
                         )}
                         <div className="text-xs xs:text-sm leading-relaxed font-inter pr-8">
                           {(() => {
-                            // First, split content by URLs to handle them separately
+                            // First, handle markdown-style links [text](URL) to prevent duplication
+                            let processedContent = msg.content;
+
+                            // Replace markdown links with just the URL for consistent handling
+                            processedContent = processedContent.replace(
+                              /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+                              "$2"
+                            );
+
+                            // Split content by URLs to handle them separately
                             const urlParts =
-                              msg.content.split(/(https?:\/\/[^\s]+)/g);
+                              processedContent.split(/(https?:\/\/[^\s)]+)/g);
 
                             return urlParts.map((part, index) => {
                               // Check if this part is a URL
-                              const urlRegex = /^https?:\/\/[^\s]+$/;
+                              const urlRegex = /^https?:\/\/[^\s)]+$/;
                               if (urlRegex.test(part)) {
-                                // Remove any parentheses around the URL
+                                // Clean the URL (remove any trailing punctuation)
                                 const cleanUrl = part
-                                  .replace(/^[()]*/, "")
-                                  .replace(/[()]*$/, "");
+                                  .replace(/[().,;!?]*$/, "")
+                                  .replace(/^[()]*/, "");
                                 return (
                                   <div key={index} className="my-2">
                                     <div className="text-xs text-gray-600 dark:text-gray-400 mb-1 font-medium">
